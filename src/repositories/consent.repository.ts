@@ -53,7 +53,7 @@ export class ConsentRepository extends Repository {
   }
 
   public async newUserFlowBegins() {
-    const { body } = this.client.request.send({
+    const { body } = await this.client.request.send({
       method: 'POST',
       url: '/api/v1/consent/new_user_flow_begins/',
       form: this.client.request.sign({

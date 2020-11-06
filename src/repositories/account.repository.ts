@@ -48,7 +48,7 @@ export class AccountRepository extends Repository {
   }
 
   public async validateSignupSmsCode(
-    phone_number: string,
+    phoneNumber: string,
     verificationCode: string,
   ): Promise<AccountRepositoryLoginResponseLogged_in_user> {
     const response = await Bluebird.try(() =>
@@ -74,13 +74,13 @@ export class AccountRepository extends Repository {
   }
 
   public async createValidated(
-    initOptions: AccountEditProfileOptions,
+    initOptions: AccountCreateOptions,
   ): Promise<AccountRepositoryLoginResponseLogged_in_user> {
     if (!this.client.state.passwordEncryptionPubKey) {
       await this.client.qe.syncLoginExperiments();
     }
+    const { password, ...options } = initOptions;
     const { encrypted, time } = this.encryptPassword(password);
-    const { password, ...options } = options;
 
     const response = await Bluebird.try(() =>
       this.client.request.send({
@@ -106,7 +106,7 @@ export class AccountRepository extends Repository {
           _csrftoken: this.client.state.cookieCsrfToken,
           device_id: this.client.state.deviceId,
           waterfall_id: this.client.state.uuid,
-          _uuid: this.account.client.state.uuid,
+          _uuid: this.client.state.uuid,
         }),
       }),
     ).catch(IgResponseError, error => {
