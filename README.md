@@ -40,12 +40,12 @@ http://open.igpapi.com/
 
 It uses OpenAPI specification, so you can generate SDK for any programming language in several minutes.
 
-You can use it right in the browser without need to have a server. 
+You can use it right in the browser without need to have a server.
 
 You can even use it in React Native. Yes, without bridges.
 
 It's free for a while, until it's stable. The function set is poor now, because, to be honest i'm not sure if there's a demand for it.
-So if you would like to use it, have feature-requests or bug reports - please [contact me](https://t.me/bowzee) - i'll implement things you need very fast. 
+So if you would like to use it, have feature-requests or bug reports - please [contact me](https://t.me/bowzee) - i'll implement things you need very fast.
 
 # Table of Contents
 
@@ -110,6 +110,60 @@ ig.state.proxyUrl = process.env.IG_PROXY;
   // The same as preLoginFlow()
   // Optionally wrap it to process.nextTick so we dont need to wait ending of this bunch of requests
   process.nextTick(async () => await ig.simulate.postLoginFlow());
+  // Create UserFeed instance to get loggedInUser's posts
+  const userFeed = ig.feed.user(loggedInUser.pk);
+  const myPostsFirstPage = await userFeed.items();
+  // All the feeds are auto-paginated, so you just need to call .items() sequentially to get next page
+  const myPostsSecondPage = await userFeed.items();
+  await ig.media.like({
+    // Like our first post from first page or first post from second page randomly
+    mediaId: sample([myPostsFirstPage[0].id, myPostsSecondPage[0].id]),
+    moduleInfo: {
+      module_name: 'profile',
+      user_id: loggedInUser.pk,
+      username: loggedInUser.username,
+    },
+    d: sample([0, 1]),
+  });
+})();
+```
+
+## Signup via phone example
+
+```typescript
+import { IgApiClient } from './index';
+import { sample } from 'lodash';
+const ig = new IgApiClient();
+// You must generate device id's before login.
+// Id's generated based on seed
+// So if you pass the same value as first argument - the same id's are generated every time
+ig.state.generateDevice(process.env.IG_USERNAME);
+// Optionally you can setup proxy url
+ig.state.proxyUrl = process.env.IG_PROXY;
+(async () => {
+  // Execute all requests prior to authorization in the real Android application
+  // Not required but recommended
+  await ig.simulate.preLoginFlow();
+
+  const phone_number: string = '79178272727';
+  await ig.account.sendSignupSmsCode(phone_number);
+  const verification_code: string = '123456';
+  await ig.account.validateSignupSmsCode(phone_number, verification_code);
+  const loggedInUser = await ig.account.createValidated({
+    phone_number,
+    verification_code,
+    username: 'something',
+    first_name: 'Someone',
+    password: 'password',
+    year: '1995',
+    month: '05',
+    day: '05',
+  });
+
+  // The same as preLoginFlow()
+  // Optionally wrap it to process.nextTick so we dont need to wait ending of this bunch of requests
+  process.nextTick(async () => await ig.simulate.postLoginFlow());
+
   // Create UserFeed instance to get loggedInUser's posts
   const userFeed = ig.feed.user(loggedInUser.pk);
   const myPostsFirstPage = await userFeed.items();

@@ -1,3 +1,4 @@
+export * from './account.create.options';
 export * from './account.edit-profile.options';
 export * from './account.two-factor-login.options';
 export * from './common.types';

@@ -13,7 +13,7 @@ import {
   IgLoginTwoFactorRequiredError,
   IgResponseError,
 } from '../errors';
-import { IgResponse, AccountEditProfileOptions, AccountTwoFactorLoginOptions } from '../types';
+import { IgResponse, AccountCreateOptions, AccountEditProfileOptions, AccountTwoFactorLoginOptions } from '../types';
 import { defaultsDeep } from 'lodash';
 import { IgSignupBlockError } from '../errors/ig-signup-block.error';
 import Bluebird = require('bluebird');
@@ -22,11 +22,107 @@ import * as crypto from 'crypto';
 
 export class AccountRepository extends Repository {
   private static accountDebug = debug('ig:account');
+  public async sendSignupSmsCode(phoneNumber: string): Promise<AccountRepositoryLoginResponseLogged_in_user> {
+    const response = await Bluebird.try(() =>
+      this.client.request.send({
+        method: 'POST',
+        url: '/api/v1/accounts/send_signup_sms_code/',
+        form: this.client.request.sign({
+          phone_number: phoneNumber,
+          login_nonce_map: {},
+          prefill_shown: 'False',
+          guid: this.client.state.uuid,
+          phone_id: this.client.state.phoneId,
+          _csrftoken: this.client.state.cookieCsrfToken,
+          device_id: this.client.state.deviceId,
+          waterfall_id: this.client.state.uuid,
+        }),
+      }),
+    ).catch(IgResponseError, error => {
+      // TODO: catch errors
+      throw error;
+    });
+    // TODO: return body
+    console.log('response.body', response.body);
+    return response.body.logged_in_user;
+  }
+
+  public async validateSignupSmsCode(
+    phone_number: string,
+    verificationCode: string,
+  ): Promise<AccountRepositoryLoginResponseLogged_in_user> {
+    const response = await Bluebird.try(() =>
+      this.client.request.send({
+        method: 'POST',
+        url: '/api/v1/accounts/validate_signup_sms_code/',
+        form: this.client.request.sign({
+          phone_number: phoneNumber,
+          verification_code: verificationCode,
+          guid: this.client.state.uuid,
+          _csrftoken: this.client.state.cookieCsrfToken,
+          device_id: this.client.state.deviceId,
+          waterfall_id: this.client.state.uuid,
+        }),
+      }),
+    ).catch(IgResponseError, error => {
+      // TODO: catch errors
+      throw error;
+    });
+    // TODO: return body
+    console.log('response.body', response.body);
+    return response.body.logged_in_user;
+  }
+
+  public async createValidated(
+    initOptions: AccountEditProfileOptions,
+  ): Promise<AccountRepositoryLoginResponseLogged_in_user> {
+    if (!this.client.state.passwordEncryptionPubKey) {
+      await this.client.qe.syncLoginExperiments();
+    }
+    const { encrypted, time } = this.encryptPassword(password);
+    const { password, ...options } = options;
+
+    const response = await Bluebird.try(() =>
+      this.client.request.send({
+        method: 'POST',
+        url: '/api/v1/accounts/create_validated/',
+        form: this.client.request.sign({
+          ...options,
+          enc_password: `#PWD_INSTAGRAM:4:${time}:${encrypted}`,
+          is_secondary_account_creation: 'false',
+          tos_version: 'row',
+          suggestedUsername: '',
+          sn_result: 'GOOGLE_PLAY_UNAVAILABLE: SERVICE_INVALID',
+          do_not_auto_login_if_credentials_match: 'true',
+          adid: '',
+          sn_nonce: '', // ????
+          force_sign_up_code: '',
+          qs_stamp: '',
+          has_sms_consent: 'true',
+          one_tap_opt_in: 'true',
+          jazoest: AccountRepository.createJazoest(this.client.state.phoneId),
+          guid: this.client.state.uuid,
+          phone_id: this.client.state.phoneId,
+          _csrftoken: this.client.state.cookieCsrfToken,
+          device_id: this.client.state.deviceId,
+          waterfall_id: this.client.state.uuid,
+          _uuid: this.account.client.state.uuid,
+        }),
+      }),
+    ).catch(IgResponseError, error => {
+      // TODO: catch errors
+      throw error;
+    });
+    // TODO: return body
+    console.log('response.body', response.body);
+    return response.body.logged_in_user;
+  }
+
   public async login(username: string, password: string): Promise<AccountRepositoryLoginResponseLogged_in_user> {
     if (!this.client.state.passwordEncryptionPubKey) {
       await this.client.qe.syncLoginExperiments();
     }
-    const {encrypted, time} = this.encryptPassword(password);
+    const { encrypted, time } = this.encryptPassword(password);
     const response = await Bluebird.try(() =>
       this.client.request.send<AccountRepositoryLoginResponseRootObject>({
         method: 'POST',
@@ -77,14 +173,17 @@ export class AccountRepository extends Repository {
     return `2${sum}`;
   }
 
-  public encryptPassword(password: string): { time: string, encrypted: string } {
+  public encryptPassword(password: string): { time: string; encrypted: string } {
     const randKey = crypto.randomBytes(32);
     const iv = crypto.randomBytes(12);
-    const rsaEncrypted = crypto.publicEncrypt({
-      key: Buffer.from(this.client.state.passwordEncryptionPubKey, 'base64').toString(),
-      // @ts-ignore
-      padding: crypto.constants.RSA_PKCS1_PADDING,
-    }, randKey);
+    const rsaEncrypted = crypto.publicEncrypt(
+      {
+        key: Buffer.from(this.client.state.passwordEncryptionPubKey, 'base64').toString(),
+        // @ts-ignore
+        padding: crypto.constants.RSA_PKCS1_PADDING,
+      },
+      randKey,
+    );
     const cipher = crypto.createCipheriv('aes-256-gcm', randKey, iv);
     const time = Math.floor(Date.now() / 1000).toString();
     cipher.setAAD(Buffer.from(time));
@@ -98,8 +197,10 @@ export class AccountRepository extends Repository {
         Buffer.from([1, this.client.state.passwordEncryptionKeyId]),
         iv,
         sizeBuffer,
-        rsaEncrypted, authTag, aesEncrypted])
-        .toString('base64'),
+        rsaEncrypted,
+        authTag,
+        aesEncrypted,
+      ]).toString('base64'),
     };
   }
 
